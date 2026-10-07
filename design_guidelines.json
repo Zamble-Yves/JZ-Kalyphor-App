@@ -1,0 +1,159 @@
+{
+  "app_name": "JZ KALYPHOR",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A professional, warm, and highly readable coaching tracker that brings academic rigor and structure into a seamless iOS-native flow.",
+  "color": {
+    "surface": "#FDFBFB",
+    "onSurface": "#1A1515",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#2D2424",
+    "surfaceTertiary": "#F4F0F0",
+    "onSurfaceTertiary": "#4A3C3C",
+    "surfaceInverse": "#2A1F20",
+    "onSurfaceInverse": "#FDFBFB",
+    "brand": "#8A1C2B",
+    "brandPrimary": "#8A1C2B",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#A02D3C",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#F3E6E8",
+    "onBrandTertiary": "#8A1C2B",
+    "success": "#2E7D32",
+    "onSuccess": "#FFFFFF",
+    "warning": "#B97700",
+    "onWarning": "#FFFFFF",
+    "error": "#C62828",
+    "onError": "#FFFFFF",
+    "info": "#1565C0",
+    "onInfo": "#FFFFFF",
+    "border": "#E5DBDC",
+    "borderStrong": "#CBA9AD",
+    "divider": "#F0E8E9",
+    "muted": "#7A696A",
+    "onBrand": "#FFFFFF"
+  },
+  "typography": {
+    "displayFontFamily": "Geist",
+    "textFontFamily": "Geist",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous vertical breathing room. Cards never flush to screen edge; use md or lg margin. Content flows comfortably.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 1,
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use glass on bottom tab bar.",
+      "Use glass on sticky headers over scrolling content.",
+      "Apply to featured action buttons and Floating Action Buttons."
+    ],
+    "dont's": [
+      "Never blur body text regions or form fields.",
+      "Do not use glass for standard list items or cards."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler",
+    "charts": "recharts"
+  },
+  "screens": [
+    {
+      "name": "Student Dashboard",
+      "purpose": "A personalized home screen combining welcome messaging, top-level progress stats, and immediate access to their current action item.",
+      "states": {
+        "loading": "Centered brand-colored spinner.",
+        "empty": "Illustration with 'Commencez votre premier module' and CTA to view courses.",
+        "error": "Readable error message 'Impossible de charger le tableau de bord' with a retry button."
+      },
+      "layout": "Header with 'Bonjour [Nom]' and avatar. Top section: visual progress indicator (bar chart or circle) + 'jours restants'. Middle: 'Reprendre où vous en étiez' featured card with glass overlay on the course image. Bottom: Sticky CTA 'Déposer ma preuve d'avancement' pinned above tab bar."
+    },
+    {
+      "name": "Course List (Espace Étudiant)",
+      "purpose": "A structured, filterable list of all curriculum modules allowing students to find what to study next.",
+      "states": {
+        "loading": "Skeleton rows matching the height of course cards.",
+        "empty": "No courses found for the selected filter. 'Aucun cours dans cette catégorie'.",
+        "error": "Error fetching courses. Retry button."
+      },
+      "layout": "Sticky header with horizontal scrollable filter chips (pill shape, surfaceTertiary/brandTertiary based on active state: Tous, YouTube, PDF, Externe). Below: Masonry or single-column cards with status chips (À faire, En cours, Terminé) using brandTertiary/warning/success colors."
+    },
+    {
+      "name": "Admin Dashboard / List",
+      "purpose": "Command center for coaches to monitor cohorts, filter by status, and quickly spot students falling behind.",
+      "states": {
+        "loading": "Skeleton table/list.",
+        "empty": "No students match the current filters.",
+        "error": "Unable to load student data. Retry button."
+      },
+      "layout": "Top sticky bar with Cohort segmented controls (tabs) and a Filter icon. Search bar underneath. Main list: Compact student rows (Avatar, Name, Progress %) with a highly visible red 'En retard' badge if they haven't submitted proof in 7+ days. Swiping a row or tapping an overflow menu reveals the quick WhatsApp action."
+    },
+    {
+      "name": "Student Detail (Admin)",
+      "purpose": "Detailed view of an individual student's progression with coach actions and alerts.",
+      "states": {
+        "loading": "Centered spinner.",
+        "empty": "Student has no data yet.",
+        "error": "Error loading student profile."
+      },
+      "layout": "Profile cover banner (brand tint) overlapping the student's avatar. Top card: General info and cohort. Middle section: Recharts component showing progress curve. Alert banner (warning/error colored) for 'Étudiant en retard'. Sticky bottom action bar with two buttons: 'Relance WhatsApp' (primary) and 'PDF Bilan' (secondary)."
+    }
+  ],
+  "images": {
+    "student_hero": {
+      "url": "https://images.unsplash.com/photo-1758612214844-8e3a0ff255c3",
+      "alt": "Young African student studying online with a laptop and headphones"
+    },
+    "coach_office": {
+      "url": "https://images.unsplash.com/photo-1600880292203-757bb62b4baf",
+      "alt": "Professional business coach in a session"
+    }
+  },
+  "haptics": {
+    "events": {
+      "tab_press": "light",
+      "primary_button_press": "medium",
+      "filter_chip_select": "light",
+      "status_change": "success"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the #8A1C2B (Bordeaux) primary color for branding, utilizing the generated tonal palette for active states, chips, and backgrounds.",
+    "Implement the sticky primary CTA pattern (e.g., 'Déposer ma preuve d'avancement') floating above the scrollable content with a bottom padding buffer.",
+    "Ensure the application language is French ('Déposer ma preuve d'avancement', 'En retard', etc.).",
+    "For the 'En retard' alert on the admin side, emphasize it using the error token (#C62828) applied to a surface/badge to ensure high visibility.",
+    "Use Recharts for the admin progress chart; configure it to be compact and mobile-friendly without breaking the safe area margins.",
+    "Never use Indigo, Blue, or Purple. Stick strictly to the warm gray/off-white neutrals and the Bordeaux brand colors.",
+    "Use expo-image with a gradient scrim (top to bottom, transparent to surfaceInverse at 70% opacity) for any text overlaid on images, like the 'Reprendre où vous en étiez' card."
+  ]
+}
