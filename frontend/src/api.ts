@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
-const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL as string;
+const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || "http://localhost:8000").replace(/\/$/, "");
 const TOKEN_KEY = "jzk_token";
 const USER_KEY = "jzk_user";
 
@@ -80,8 +80,8 @@ export function fileUrl(path: string, token?: string) {
 }
 
 export async function login(email: string, password: string) {
-  const data = await api<{ token: string; user: User }>("/auth/login", {
-    method: "POST", body: JSON.stringify({ email, password }),
+  const data = await api<{ token: string; user: User }>('/auth/login', {
+    method: 'POST', body: JSON.stringify({ email, password }),
   });
   await setSession(data.token, data.user);
   return data;

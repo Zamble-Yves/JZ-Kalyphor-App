@@ -9,18 +9,19 @@ from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal
 from datetime import datetime, timezone, timedelta
+from contextlib import asynccontextmanager
 import os, uuid, logging, jwt, bcrypt, requests, secrets
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-MONGO_URL = os.environ['MONGO_URL']
-DB_NAME = os.environ['DB_NAME']
-JWT_SECRET = os.environ['JWT_SECRET']
-ADMIN_EMAIL = os.environ['ADMIN_EMAIL']
-ADMIN_PASSWORD = os.environ['ADMIN_PASSWORD']
-ADMIN_NAME = os.environ['ADMIN_NAME']
-EMERGENT_KEY = os.environ.get('EMERGENT_LLM_KEY')
+MONGO_URL = os.getenv('MONGO_URL', 'mongodb://localhost:27017')
+DB_NAME = os.getenv('DB_NAME', 'jzk')
+JWT_SECRET = os.getenv('JWT_SECRET', 'change-this-secret')
+ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', 'admin@localhost')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'ChangeMe123!')
+ADMIN_NAME = os.getenv('ADMIN_NAME', 'Admin')
+EMERGENT_KEY = os.getenv('EMERGENT_LLM_KEY')
 
 STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
 STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
@@ -150,13 +151,11 @@ def compute_progress(courses: List[dict]) -> int:
 async def recompute_user_stats(user_id: str):
     courses = await db.courses.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
     progress = compute_progress(courses)
-    # last proof date
     last_proof = await db.proofs.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(1)
     last_proof_at = last_proof[0]["created_at"] if last_proof else None
     status = "in_progress"
     if progress >= 100: status = "completed"
     else:
-        # Late if deadline passed OR no proof in 7 days
         is_late = False
         if last_proof_at:
             try:
@@ -164,7 +163,8 @@ async def recompute_user_stats(user_id: str):
                 if (datetime.now(timezone.utc) - d).days > 7: is_late = True
             except: pass
         else:
-            is_late = True
+            if courses:
+                is_late = True
         if is_late: status = "late"
     await db.users.update_one({"id": user_id}, {"$set": {"progress": progress, "status": status, "last_proof_at": last_proof_at}})
 
@@ -296,7 +296,6 @@ async def update_course(cid: str, body: CourseUpdate, user=Depends(current_user)
         raise HTTPException(403, "Non autorisé")
     patch = body.model_dump(exclude_unset=True)
     if user["role"] != "admin":
-        # Students can only update status and favorite
         patch = {k: v for k, v in patch.items() if k in ("status", "favorite")}
     patch = {k: v for k, v in patch.items() if v is not None}
     if patch: await db.courses.update_one({"id": cid}, {"$set": patch})
@@ -334,9 +333,8 @@ async def my_estimate(user=Depends(current_user)):
     elif done and total_minutes > 0:
         avg = total_minutes / len(done)
     else:
-        avg = 45.0  # default assumption: 45 min per course
+        avg = 45.0
     est_minutes = int(avg * len(remaining))
-    # assume 60 min of study per day
     est_days = max(1, int(round(est_minutes / 60.0)))
     est_date = (datetime.now(timezone.utc) + timedelta(days=est_days)).date().isoformat() if remaining else None
     return {
@@ -399,7 +397,6 @@ async def get_file(path: str, token: Optional[str] = None, auth: Optional[str] =
             if payload.get("path") == path: allowed = True
         except Exception: pass
     if not allowed and auth and auth.lower().startswith("bearer "):
-        # authenticated user with access to proof
         try:
             p = jwt.decode(auth.split()[1], JWT_SECRET, algorithms=["HS256"])
             proof = await db.proofs.find_one({"storage_path": path}, {"_id": 0})
@@ -417,7 +414,6 @@ async def get_file(path: str, token: Optional[str] = None, auth: Optional[str] =
 # ---------------------------- Messages ----------------------------
 @api.get("/messages")
 async def list_messages(with_user: Optional[str] = None, user=Depends(current_user)):
-    # Student messages always with admin; admin passes with_user=student id
     other = None
     if user["role"] == "admin":
         if not with_user: raise HTTPException(400, "with_user requis")
@@ -450,7 +446,6 @@ async def admin_stats(admin=Depends(admin_only)):
     for u in users:
         await recompute_user_stats(u["id"])
     users = await db.users.find({"role": "student"}, {"_id": 0, "password": 0}).to_list(1000)
-    # by cohort
     by_cohort = {}
     for u in users:
         c = u.get("cohort") or "N/A"
@@ -483,7 +478,6 @@ async def late_students(admin=Depends(admin_only)):
 
 # ---------------------------- Startup Seeding ----------------------------
 async def seed():
-    # Admin
     if not await db.users.find_one({"email": ADMIN_EMAIL.lower()}):
         await db.users.insert_one({
             "id": str(uuid.uuid4()), "email": ADMIN_EMAIL.lower(), "name": ADMIN_NAME,
@@ -493,7 +487,10 @@ async def seed():
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         log.info("Admin seeded")
-    # Demo students if none exist
+
+    if os.getenv("SEED_DEMO_USERS", "true").lower() != "true":
+        return
+
     student_count = await db.users.count_documents({"role": "student"})
     if student_count == 0:
         demos = [
@@ -527,7 +524,6 @@ async def seed():
                 "progress": 0, "status": "in_progress", "first_login": True, "welcome_seen": False,
                 "note": "", "created_at": datetime.now(timezone.utc).isoformat(),
             })
-            # advance 3rd student further and leave 2nd one late (no recent proof)
             tpl = [dict(c) for c in course_tpl]
             if i == 2:
                 for c in tpl: c["status"] = "done"
@@ -541,7 +537,6 @@ async def seed():
                     "id": str(uuid.uuid4()), "user_id": uid, "order": order,
                     "created_at": datetime.now(timezone.utc).isoformat(), **c,
                 })
-            # Fake proof for first and third students (recent) so they're not late
             if i in (0, 2):
                 await db.proofs.insert_one({
                     "id": str(uuid.uuid4()), "user_id": uid, "storage_path": "demo/no-upload.jpg",
@@ -549,7 +544,6 @@ async def seed():
                     "filename": "preuve.jpg",
                     "created_at": (datetime.now(timezone.utc) - timedelta(days=2)).isoformat(),
                 })
-            # Old proof for 4th -> late
             if i == 3:
                 await db.proofs.insert_one({
                     "id": str(uuid.uuid4()), "user_id": uid, "storage_path": "demo/no-upload.jpg",
@@ -560,17 +554,23 @@ async def seed():
             await recompute_user_stats(uid)
         log.info("Demo students seeded")
 
-@app.on_event("startup")
-async def _startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     await seed()
-
-@app.on_event("shutdown")
-async def _shutdown():
+    yield
     client.close()
+
+app = FastAPI(lifespan=lifespan)
 
 @api.get("/")
 async def root():
     return {"ok": True, "name": "JZ KALYPHOR API"}
 
 app.include_router(api)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
