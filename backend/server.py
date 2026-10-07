@@ -101,9 +101,17 @@ class CourseUpdate(BaseModel):
 class TimeLogIn(BaseModel):
     minutes: int
 
+class FileAttachment(BaseModel):
+    id: str
+    filename: str
+    content_type: str
+    storage_path: str
+    size_bytes: Optional[int] = None
+
 class MessageIn(BaseModel):
     to_user_id: str
     content: str
+    attachments: Optional[List[FileAttachment]] = None
 
 class NoteUpdate(BaseModel):
     note: str
@@ -414,7 +422,29 @@ async def get_file(path: str, token: Optional[str] = None, auth: Optional[str] =
         raise HTTPException(404, "Fichier non trouvé")
     return Response(content=content, media_type=ct)
 
-# ---------------------------- Messages ----------------------------
+# ---------------------------- Messages (Enhanced) ----------------------------
+@api.post("/messages/upload-attachment")
+async def upload_attachment(file: UploadFile = File(...), user=Depends(current_user)):
+    """Upload file attachment for messaging (documents, screenshots, etc.)"""
+    data = await file.read()
+    if len(data) > 50 * 1024 * 1024:  # 50MB limit
+        raise HTTPException(413, "File too large (max 50MB)")
+    
+    ext = (file.filename or "doc").rsplit(".", 1)[-1].lower()
+    file_id = str(uuid.uuid4())
+    path = f"{APP_NAME}/messages/{user['id']}/{file_id}.{ext}"
+    ct = file.content_type or "application/octet-stream"
+    
+    await run_in_threadpool(_put, path, data, ct)
+    
+    return {
+        "id": file_id,
+        "filename": file.filename or f"document.{ext}",
+        "content_type": ct,
+        "storage_path": path,
+        "size_bytes": len(data),
+    }
+
 @api.get("/messages")
 async def list_messages(with_user: Optional[str] = None, user=Depends(current_user)):
     # Student messages always with admin; admin passes with_user=student id
@@ -433,8 +463,14 @@ async def list_messages(with_user: Optional[str] = None, user=Depends(current_us
 
 @api.post("/messages")
 async def send_message(body: MessageIn, user=Depends(current_user)):
-    doc = {"id": str(uuid.uuid4()), "from_user": user["id"], "to_user": body.to_user_id,
-           "content": body.content, "created_at": datetime.now(timezone.utc).isoformat()}
+    doc = {
+        "id": str(uuid.uuid4()), 
+        "from_user": user["id"], 
+        "to_user": body.to_user_id,
+        "content": body.content,
+        "attachments": body.attachments or [],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
     await db.messages.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
@@ -442,6 +478,69 @@ async def send_message(body: MessageIn, user=Depends(current_user)):
 async def admin_id():
     a = await db.users.find_one({"role": "admin"}, {"_id": 0, "id": 1, "name": 1})
     return a or {}
+
+# New endpoint: get all conversations for admin (list of students with latest message)
+@api.get("/admin/conversations")
+async def admin_conversations(admin=Depends(admin_only)):
+    """Get all student conversations for admin inbox"""
+    # Get all students
+    students = await db.users.find({"role": "student"}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(1000)
+    
+    conversations = []
+    for student in students:
+        # Get latest message with this student
+        latest = await db.messages.find({
+            "$or": [
+                {"from_user": admin["id"], "to_user": student["id"]},
+                {"from_user": student["id"], "to_user": admin["id"]}
+            ]
+        }, {"_id": 0}).sort("created_at", -1).limit(1).to_list(1)
+        
+        conversations.append({
+            "student_id": student["id"],
+            "student_name": student["name"],
+            "student_email": student["email"],
+            "latest_message": latest[0] if latest else None,
+        })
+    
+    # Sort by latest message timestamp
+    conversations.sort(
+        key=lambda x: x["latest_message"]["created_at"] if x["latest_message"] else "1970-01-01",
+        reverse=True
+    )
+    
+    return conversations
+
+# New endpoint: get attachment download URL
+@api.get("/messages/attachment-url/{attachment_id}")
+async def get_attachment_url(attachment_id: str, user=Depends(current_user)):
+    """Get signed URL for message attachment"""
+    # Find message containing this attachment
+    msg = await db.messages.find_one(
+        {
+            "attachments.id": attachment_id,
+            "$or": [
+                {"from_user": user["id"]},
+                {"to_user": user["id"]}
+            ]
+        },
+        {"_id": 0, "attachments": 1}
+    )
+    
+    if not msg:
+        raise HTTPException(404, "Attachment not found or access denied")
+    
+    attachment = next((a for a in msg.get("attachments", []) if a["id"] == attachment_id), None)
+    if not attachment:
+        raise HTTPException(404, "Attachment not found")
+    
+    token = make_file_token(attachment["storage_path"])
+    return {
+        "url": f"/api/files/{attachment['storage_path']}?token={token}",
+        "token": token,
+        "filename": attachment["filename"],
+        "content_type": attachment.get("content_type", "application/octet-stream"),
+    }
 
 # ---------------------------- Admin Stats ----------------------------
 @api.get("/admin/stats")
