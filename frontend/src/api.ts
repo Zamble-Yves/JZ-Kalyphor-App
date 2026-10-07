@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
-const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL as string;
+export const BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL as string) || "";
 const TOKEN_KEY = "jzk_token";
 const USER_KEY = "jzk_user";
 
@@ -13,6 +13,14 @@ export type User = {
   progress: number; status: "in_progress" | "late" | "completed";
   first_login: boolean; welcome_seen: boolean;
   note?: string;
+};
+
+export type MessageAttachment = {
+  id: string;
+  filename: string;
+  content_type: string;
+  storage_path: string;
+  size_bytes?: number;
 };
 
 let _token: string | null = null;
@@ -47,7 +55,7 @@ export function setCachedUser(u: User) {
 export async function api<T = any>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers: any = { "Content-Type": "application/json", ...(opts.headers || {}) };
   if (_token) headers.Authorization = `Bearer ${_token}`;
-  const res = await fetch(`${BACKEND}/api${path}`, { ...opts, headers });
+  const res = await fetch(`${BACKEND_URL}/api${path}`, { ...opts, headers });
   if (!res.ok) {
     let msg = `Erreur ${res.status}`;
     try { const j = await res.json(); msg = j.detail || msg; } catch {}
@@ -66,7 +74,7 @@ export async function uploadProof(uri: string, filename: string, mime: string, c
     form.append("file", { uri, name: filename, type: mime } as any);
   }
   form.append("comment", comment);
-  const res = await fetch(`${BACKEND}/api/proofs`, {
+  const res = await fetch(`${BACKEND_URL}/api/proofs`, {
     method: "POST",
     headers: { Authorization: `Bearer ${_token}` },
     body: form,
@@ -75,12 +83,38 @@ export async function uploadProof(uri: string, filename: string, mime: string, c
   return res.json();
 }
 
+export async function uploadMessageAttachment(uri: string, filename: string, mime: string) {
+  const form = new FormData();
+  if (Platform.OS === "web") {
+    const blob = await (await fetch(uri)).blob();
+    form.append("file", blob, filename);
+  } else {
+    form.append("file", { uri, name: filename, type: mime } as any);
+  }
+  const res = await fetch(`${BACKEND_URL}/api/messages/upload-attachment`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${_token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Téléversement impossible (${res.status})${text ? `: ${text}` : ""}`);
+  }
+  return res.json() as Promise<MessageAttachment>;
+}
+
+export async function openMessageAttachment(attachmentId: string) {
+  const data = await api<{ url: string; filename: string; content_type: string }>(`/messages/attachment-url/${attachmentId}`);
+  const url = data.url.startsWith("http") ? data.url : `${BACKEND_URL}${data.url}`;
+  return { ...data, url };
+}
+
 export function fileUrl(path: string, token?: string) {
-  return `${BACKEND}/api/files/${path}${token ? `?token=${token}` : ""}`;
+  return `${BACKEND_URL}/api/files/${path}${token ? `?token=${token}` : ""}`;
 }
 
 export async function login(email: string, password: string) {
-  const data = await api<{ token: string; user: User }>("/auth/login", {
+  const data = await api<{ token: string; user: User }>('/auth/login', {
     method: "POST", body: JSON.stringify({ email, password }),
   });
   await setSession(data.token, data.user);
