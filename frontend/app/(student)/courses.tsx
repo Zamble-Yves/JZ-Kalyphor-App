@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Linking, Modal, TextInput, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
+import * as Clipboard from "expo-clipboard";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { Button, Card, Badge } from "@/src/ui";
 import { api } from "@/src/api";
@@ -13,6 +14,8 @@ type Course = {
   status: "todo" | "in_progress" | "done";
   favorite?: boolean;
   time_spent_minutes?: number;
+  access_email?: string;
+  access_password?: string;
 };
 
 const FILTERS = [
@@ -44,6 +47,14 @@ export default function Courses() {
   const [videoCourse, setVideoCourse] = useState<Course | null>(null);
   const [timeCourse, setTimeCourse] = useState<Course | null>(null);
   const [timeInput, setTimeInput] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
+  const [showPwFor, setShowPwFor] = useState<string | null>(null);
+
+  const copy = async (text: string, label: string) => {
+    try { await Clipboard.setStringAsync(text); } catch {}
+    setCopied(label);
+    setTimeout(() => setCopied(null), 1500);
+  };
 
   const load = useCallback(async () => {
     try { setCourses(await api<Course[]>("/me/courses")); } catch {}
@@ -145,6 +156,38 @@ export default function Courses() {
                 <Ionicons name="arrow-forward" size={16} color="#fff" />
               </Pressable>
 
+              {(c.access_email || c.access_password) && (
+                <View style={styles.credBox} testID={`creds-${c.id}`}>
+                  <View style={styles.credHeader}>
+                    <Ionicons name="key" size={16} color={colors.brandPrimary} />
+                    <Text style={styles.credTitle}>Identifiants d'accès</Text>
+                  </View>
+                  {c.access_email ? (
+                    <Pressable style={styles.credRow} onPress={() => copy(c.access_email!, `email-${c.id}`)} testID={`copy-email-${c.id}`}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.credLabel}>Email</Text>
+                        <Text style={styles.credValue} selectable>{c.access_email}</Text>
+                      </View>
+                      <Ionicons name={copied === `email-${c.id}` ? "checkmark" : "copy-outline"} size={18} color={colors.brandPrimary} />
+                    </Pressable>
+                  ) : null}
+                  {c.access_password ? (
+                    <View style={styles.credRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.credLabel}>Mot de passe</Text>
+                        <Text style={styles.credValue} selectable>{showPwFor === c.id ? c.access_password : "•".repeat(Math.min(c.access_password.length, 10))}</Text>
+                      </View>
+                      <Pressable onPress={() => setShowPwFor(showPwFor === c.id ? null : c.id)} testID={`toggle-pw-${c.id}`} style={styles.eyeBtn}>
+                        <Ionicons name={showPwFor === c.id ? "eye-off-outline" : "eye-outline"} size={18} color={colors.muted} />
+                      </Pressable>
+                      <Pressable onPress={() => copy(c.access_password!, `pw-${c.id}`)} testID={`copy-pw-${c.id}`} style={styles.eyeBtn}>
+                        <Ionicons name={copied === `pw-${c.id}` ? "checkmark" : "copy-outline"} size={18} color={colors.brandPrimary} />
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+
               <View style={styles.actionRow}>
                 <Pressable onPress={() => { setTimeCourse(c); setTimeInput(""); }} style={styles.timeBtn} testID={`time-${c.id}`}>
                   <Ionicons name="time-outline" size={16} color={colors.brandPrimary} />
@@ -238,6 +281,13 @@ const styles = StyleSheet.create({
   starBtn: { padding: 6 },
   openBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.brandPrimary, paddingVertical: 12, borderRadius: radius.md, marginTop: spacing.md },
   openBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  credBox: { marginTop: spacing.md, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.md, gap: 6 },
+  credHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
+  credTitle: { color: colors.brandPrimary, fontWeight: "700", fontSize: 13 },
+  credRow: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 8 },
+  credLabel: { color: colors.muted, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 },
+  credValue: { color: colors.onSurface, fontSize: 14, fontWeight: "600" },
+  eyeBtn: { padding: 4 },
   actionRow: { flexDirection: "row", justifyContent: "center", marginTop: spacing.sm },
   timeBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6, paddingHorizontal: 12 },
   timeBtnText: { color: colors.brandPrimary, fontWeight: "600", fontSize: 13 },

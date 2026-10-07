@@ -16,7 +16,7 @@ export default function StudentDetail() {
   const [note, setNote] = useState("");
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
-  const [newCourse, setNewCourse] = useState<any>({ title: "", link_type: "youtube", url: "" });
+  const [newCourse, setNewCourse] = useState<any>({ title: "", link_type: "youtube", url: "", access_email: "", access_password: "" });
 
   const load = async () => {
     try {
@@ -50,8 +50,11 @@ export default function StudentDetail() {
 
   const addCourse = async () => {
     if (!newCourse.title || !newCourse.url) return;
-    await api(`/students/${id}/courses`, { method: "POST", body: JSON.stringify(newCourse) });
-    setNewCourse({ title: "", link_type: "youtube", url: "" });
+    const payload: any = { title: newCourse.title, link_type: newCourse.link_type, url: newCourse.url };
+    if (newCourse.access_email) payload.access_email = newCourse.access_email;
+    if (newCourse.access_password) payload.access_password = newCourse.access_password;
+    await api(`/students/${id}/courses`, { method: "POST", body: JSON.stringify(payload) });
+    setNewCourse({ title: "", link_type: "youtube", url: "", access_email: "", access_password: "" });
     load();
   };
 
@@ -128,7 +131,7 @@ export default function StudentDetail() {
               <Ionicons name={c.link_type === "youtube" ? "logo-youtube" : c.link_type === "pdf" ? "document-text" : "globe"} size={18} color={colors.brandPrimary} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.courseTitle}>{c.title}</Text>
-                <Text style={styles.sub}>{c.status === "todo" ? "À faire" : c.status === "in_progress" ? "En cours" : "Terminé"}</Text>
+                <Text style={styles.sub}>{c.status === "todo" ? "À faire" : c.status === "in_progress" ? "En cours" : "Terminé"}{c.access_email ? "  ·  🔑 identifiants" : ""}</Text>
               </View>
               <Pressable onPress={() => deleteCourse(c.id)} testID={`del-course-${c.id}`}><Ionicons name="trash-outline" size={18} color={colors.error} /></Pressable>
             </View>
@@ -145,6 +148,9 @@ export default function StudentDetail() {
             ))}
           </View>
           <Field label="URL" value={newCourse.url} onChangeText={(t: string) => setNewCourse({ ...newCourse, url: t })} />
+          <Text style={styles.caption}>Identifiants plateforme (optionnel — visibles pour l'étudiant)</Text>
+          <Field label="Email d'accès" value={newCourse.access_email} onChangeText={(t: string) => setNewCourse({ ...newCourse, access_email: t })} />
+          <Field label="Mot de passe d'accès" value={newCourse.access_password} onChangeText={(t: string) => setNewCourse({ ...newCourse, access_password: t })} />
           <Button title="Ajouter le cours" variant="secondary" onPress={addCourse} testID="btn-add-course" />
         </Card>
 

@@ -86,6 +86,8 @@ class CourseIn(BaseModel):
     link_type: Literal["youtube", "pdf", "external"]
     url: str
     status: Literal["todo", "in_progress", "done"] = "todo"
+    access_email: Optional[str] = None
+    access_password: Optional[str] = None
 
 class CourseUpdate(BaseModel):
     title: Optional[str] = None
@@ -93,6 +95,8 @@ class CourseUpdate(BaseModel):
     url: Optional[str] = None
     status: Optional[Literal["todo", "in_progress", "done"]] = None
     favorite: Optional[bool] = None
+    access_email: Optional[str] = None
+    access_password: Optional[str] = None
 
 class TimeLogIn(BaseModel):
     minutes: int
