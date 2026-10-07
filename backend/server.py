@@ -92,6 +92,10 @@ class CourseUpdate(BaseModel):
     link_type: Optional[Literal["youtube", "pdf", "external"]] = None
     url: Optional[str] = None
     status: Optional[Literal["todo", "in_progress", "done"]] = None
+    favorite: Optional[bool] = None
+
+class TimeLogIn(BaseModel):
+    minutes: int
 
 class MessageIn(BaseModel):
     to_user_id: str
@@ -286,21 +290,65 @@ async def update_course(cid: str, body: CourseUpdate, user=Depends(current_user)
     if not c: raise HTTPException(404, "Non trouvé")
     if user["role"] != "admin" and c["user_id"] != user["id"]:
         raise HTTPException(403, "Non autorisé")
-    # Students can only update status
     patch = body.model_dump(exclude_unset=True)
     if user["role"] != "admin":
-        patch = {"status": patch.get("status")} if "status" in patch else {}
+        # Students can only update status and favorite
+        patch = {k: v for k, v in patch.items() if k in ("status", "favorite")}
     patch = {k: v for k, v in patch.items() if v is not None}
     if patch: await db.courses.update_one({"id": cid}, {"$set": patch})
     await recompute_user_stats(c["user_id"])
     c2 = await db.courses.find_one({"id": cid}, {"_id": 0})
     return c2
 
+@api.post("/courses/{cid}/log-time")
+async def log_time(cid: str, body: TimeLogIn, user=Depends(current_user)):
+    c = await db.courses.find_one({"id": cid}, {"_id": 0})
+    if not c: raise HTTPException(404, "Non trouvé")
+    if user["role"] != "admin" and c["user_id"] != user["id"]:
+        raise HTTPException(403, "Non autorisé")
+    if body.minutes <= 0 or body.minutes > 24 * 60:
+        raise HTTPException(400, "Durée invalide")
+    await db.courses.update_one({"id": cid}, {"$inc": {"time_spent_minutes": body.minutes}})
+    await db.time_logs.insert_one({
+        "id": str(uuid.uuid4()), "course_id": cid, "user_id": c["user_id"],
+        "minutes": body.minutes, "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    c2 = await db.courses.find_one({"id": cid}, {"_id": 0})
+    return c2
+
+@api.get("/me/estimate")
+async def my_estimate(user=Depends(current_user)):
+    courses = await db.courses.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    if not courses:
+        return {"estimated_days": None, "estimated_date": None, "avg_minutes_done": 0, "remaining_courses": 0, "total_minutes_spent": 0}
+    done = [c for c in courses if c.get("status") == "done"]
+    remaining = [c for c in courses if c.get("status") != "done"]
+    total_minutes = sum(c.get("time_spent_minutes", 0) or 0 for c in courses)
+    done_with_time = [c for c in done if (c.get("time_spent_minutes") or 0) > 0]
+    if done_with_time:
+        avg = sum(c["time_spent_minutes"] for c in done_with_time) / len(done_with_time)
+    elif done and total_minutes > 0:
+        avg = total_minutes / len(done)
+    else:
+        avg = 45.0  # default assumption: 45 min per course
+    est_minutes = int(avg * len(remaining))
+    # assume 60 min of study per day
+    est_days = max(1, int(round(est_minutes / 60.0)))
+    est_date = (datetime.now(timezone.utc) + timedelta(days=est_days)).date().isoformat() if remaining else None
+    return {
+        "estimated_days": est_days if remaining else 0,
+        "estimated_date": est_date,
+        "avg_minutes_done": int(round(avg)),
+        "remaining_courses": len(remaining),
+        "total_minutes_spent": total_minutes,
+    }
+
 @api.delete("/courses/{cid}")
 async def delete_course(cid: str, admin=Depends(admin_only)):
     c = await db.courses.find_one({"id": cid}, {"_id": 0})
     if not c: raise HTTPException(404, "Non trouvé")
     await db.courses.delete_one({"id": cid})
+    await db.time_logs.delete_many({"course_id": cid})
     await recompute_user_stats(c["user_id"])
     return {"ok": True}
 

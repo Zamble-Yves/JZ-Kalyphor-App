@@ -16,6 +16,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<User | null>(getUser());
   const [refreshing, setRefreshing] = useState(false);
   const [proofs, setProofs] = useState<any[]>([]);
+  const [estimate, setEstimate] = useState<{ estimated_days: number | null; estimated_date: string | null; avg_minutes_done: number; remaining_courses: number; total_minutes_spent: number } | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [comment, setComment] = useState("");
@@ -28,6 +29,8 @@ export default function Dashboard() {
       setUser(me); setCachedUser(me);
       const p = await api<any[]>("/me/proofs");
       setProofs(p);
+      const est = await api<any>("/me/estimate");
+      setEstimate(est);
       if (!me.welcome_seen) setWelcomeOpen(true);
     } catch {}
   }, []);
@@ -122,6 +125,23 @@ export default function Dashboard() {
           </View>
         </Card>
 
+        {estimate && estimate.remaining_courses > 0 && (
+          <Card testID="dashboard-estimate-card">
+            <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+              <View style={styles.estIcon}><Ionicons name="hourglass-outline" size={22} color={colors.brandPrimary} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardLabel}>Estimation de fin</Text>
+                <Text style={styles.estValue}>
+                  {estimate.estimated_date ? new Date(estimate.estimated_date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : "—"}
+                </Text>
+                <Text style={styles.muted}>
+                  ~{estimate.estimated_days} jour{(estimate.estimated_days || 0) > 1 ? "s" : ""} · {estimate.remaining_courses} cours restant{estimate.remaining_courses > 1 ? "s" : ""} · {estimate.avg_minutes_done} min / cours en moyenne
+                </Text>
+              </View>
+            </View>
+          </Card>
+        )}
+
         <Button title="Déposer ma preuve d'avancement" onPress={() => setUploadOpen(true)} testID="btn-upload-proof" icon={<Ionicons name="cloud-upload" size={18} color="#fff" />} />
         <Button title="Générer mon bilan PDF" onPress={generatePdf} variant="secondary" testID="btn-generate-pdf" icon={<Ionicons name="document-text" size={18} color={colors.brandPrimary} />} />
 
@@ -185,6 +205,8 @@ const styles = StyleSheet.create({
   metaValue: { color: colors.onSurface, fontSize: 15, fontWeight: "600", marginTop: 2 },
   sectionTitle: { color: colors.onSurface, fontSize: 16, fontWeight: "700", marginBottom: spacing.md },
   muted: { color: colors.muted, fontSize: 13 },
+  estIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  estValue: { color: colors.onSurface, fontSize: 18, fontWeight: "800", marginTop: 2 },
   proofRow: { flexDirection: "row", gap: spacing.md, paddingVertical: 10, alignItems: "center" },
   proofDate: { color: colors.onSurface, fontWeight: "600" },
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: spacing.lg },
