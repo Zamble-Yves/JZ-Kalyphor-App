@@ -56,7 +56,10 @@ export default function Courses() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={colors.brandPrimary} />}
       >
         {filtered.length === 0 && <Text style={styles.empty}>Aucun cours dans cette catégorie</Text>}
-        {filtered.map(c => (
+        {filtered.map(c => {
+          const openLabel = c.link_type === "youtube" ? "Regarder la vidéo" : c.link_type === "pdf" ? "Ouvrir le PDF" : "Ouvrir la plateforme";
+          const openIcon = c.link_type === "youtube" ? "logo-youtube" : c.link_type === "pdf" ? "document-text" : "open-outline";
+          return (
           <Card key={c.id} testID={`course-${c.id}`}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
               <View style={styles.typeIcon}>
@@ -68,7 +71,7 @@ export default function Courses() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.courseTitle}>{c.title}</Text>
-                <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: 4 }}>
+                <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: 4, flexWrap: "wrap" }}>
                   <Badge label={c.link_type === "youtube" ? "YouTube" : c.link_type === "pdf" ? "PDF" : "Plateforme"} tone="neutral" />
                   <Badge
                     label={c.status === "todo" ? "À faire" : c.status === "in_progress" ? "En cours" : "Terminé"}
@@ -76,10 +79,15 @@ export default function Courses() {
                   />
                 </View>
               </View>
-              <Pressable onPress={() => open(c)} style={styles.linkBtn} testID={`open-${c.id}`}>
-                <Ionicons name="open-outline" size={20} color={colors.brandPrimary} />
-              </Pressable>
             </View>
+
+            <Pressable onPress={() => open(c)} style={styles.openBtn} testID={`open-${c.id}`}>
+              <Ionicons name={openIcon as any} size={18} color="#fff" />
+              <Text style={styles.openBtnText}>{openLabel}</Text>
+              <Ionicons name="arrow-forward" size={16} color="#fff" />
+            </Pressable>
+            <Text style={styles.urlPreview} numberOfLines={1}>{c.url}</Text>
+
             <View style={styles.statusRow}>
               {(["todo", "in_progress", "done"] as const).map(s => (
                 <Pressable key={s} onPress={() => updateStatus(c, s)} testID={`set-${c.id}-${s}`}
@@ -91,7 +99,8 @@ export default function Courses() {
               ))}
             </View>
           </Card>
-        ))}
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -107,7 +116,9 @@ const styles = StyleSheet.create({
   chipTextActive: { color: colors.onBrandPrimary },
   typeIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   courseTitle: { color: colors.onSurface, fontSize: 16, fontWeight: "700" },
-  linkBtn: { padding: 8, borderRadius: radius.md, backgroundColor: colors.brandTertiary },
+  openBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.brandPrimary, paddingVertical: 12, borderRadius: radius.md, marginTop: spacing.md },
+  openBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  urlPreview: { color: colors.muted, fontSize: 11, marginTop: 6, textAlign: "center" },
   statusRow: { flexDirection: "row", gap: 6, marginTop: spacing.md },
   statusBtn: { flex: 1, paddingVertical: 8, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
   statusBtnActive: { backgroundColor: colors.brandTertiary, borderColor: colors.brandPrimary },
